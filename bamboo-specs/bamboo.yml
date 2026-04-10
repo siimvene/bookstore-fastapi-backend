@@ -1,0 +1,93 @@
+---
+version: 2
+
+plan:
+  project-key: BOOK
+  key: FASTAPI
+  name: bookstore-fastapi-backend
+
+triggers:
+  - polling: 60
+
+branches:
+  create: for-pull-request
+  delete:
+    after-deleted-days: 7
+    after-inactive-days: never
+  link-to-jira: true
+
+variables:
+  application: bookstore-fastapi
+  # Docker registry
+  dockerRegistry: ${DOCKER_REGISTRY:-docker.io}
+  dockerOrg: ${DOCKER_ORG:-myorg}
+  # Test and quality settings
+  junit: true
+  sonarQube: true
+  trivy: true
+  # Feature branch publishing
+  publishFeatureBranches: false
+
+stages:
+  - Build and Test:
+      jobs:
+        - Build
+  - Docker:
+      jobs:
+        - Docker Build and Push
+
+Build:
+  docker:
+    image: python:3.12-slim
+    docker-run-arguments:
+      - --rm
+    volumes:
+      /var/run/docker.sock: /var/run/docker.sock
+  tasks:
+    - script: bamboo-specs/build.sh
+  final-tasks:
+    - test-parser:
+        conditions:
+          - variable:
+              equals:
+                junit: true
+        type: junit
+        test-results: test-results
+  artifacts:
+    - name: test-reports
+      pattern: htmlcov/**/*
+      required: false
+      shared: false
+    - name: test-results
+      pattern: test-results/**/*
+      required: false
+      shared: false
+
+Docker Build and Push:
+  docker:
+    image: python:3.12-slim
+    docker-run-arguments:
+      - --rm
+    volumes:
+      /var/run/docker.sock: /var/run/docker.sock
+  tasks:
+    - script: bamboo-specs/docker.sh
+
+---
+version: 2
+
+plan: BOOK-FASTAPI
+plan-permissions:
+  - groups:
+      - ci-developers
+    permissions:
+      - view
+      - build
+  - groups:
+      - ci-admins
+    permissions:
+      - view
+      - edit
+      - build
+      - clone
+      - admin
